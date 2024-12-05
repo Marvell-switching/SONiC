@@ -306,7 +306,7 @@ SNMP_ACL      DEFAULT_RULE  23            DROP                       ETHER_TYPE:
 #### YANG Model Enhancements
 
 Add 'policer' to sonic-yang-models/yang-templates/sonic-types.yang.j2:
-```json
+```yang
 typedef packet_action {
 	type enumeration {
 		enum DROP;
