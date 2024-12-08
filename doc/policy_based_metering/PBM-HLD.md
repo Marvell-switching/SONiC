@@ -11,17 +11,17 @@ tags:
     - [Out of Scope](#out-of-scope)
   - [Definitions/Abbreviations](#definitionsabbreviations)
   - [Overview](#overview)
-      - [*Image 1: Traffic Flow Overview*](#image-1-traffic-flow-overview)
   - [Requirements](#requirements)
     - [Functional Requirements](#functional-requirements)
   - [Scalability Requirements:](#scalability-requirements)
     - [CLI Requirements](#cli-requirements)
   - [Architecture Design](#architecture-design)
-      - [*Image 2: ACL Configuration Flow Overview*](#image-2-acl-configuration-flow-overview)
+      - [*Image 1: ACL Configuration Flow Overview*](#image-1-acl-configuration-flow-overview)
   - [High-Level Design](#high-level-design)
     - [Modules and Sub-Modules](#modules-and-sub-modules)
-      - [*Image 3: Configuration Flow Overview*](#image-3-configuration-flow-overview)
+      - [*Image 2: Configuration Flow Overview*](#image-2-configuration-flow-overview)
   - [SAI API](#sai-api)
+    - [Using example:](#using-example)
   - [Configuration and Management](#configuration-and-management)
     - [Config DB Enhancements](#config-db-enhancements)
       - [Updated ACL Tables Table schema:](#updated-acl-tables-table-schema)
@@ -31,7 +31,6 @@ tags:
     - [CLI Show Commands](#cli-show-commands)
     - [YANG Model Enhancements](#yang-model-enhancements)
   - [Warmboot and Fastboot Design Impact](#warmboot-and-fastboot-design-impact)
-  - [Memory Consumption](#memory-consumption)
   - [Restrictions/Limitations](#restrictionslimitations)
   - [Testing Requirements/Design](#testing-requirementsdesign)
     - [Unit Test Cases](#unit-test-cases)
@@ -79,10 +78,7 @@ By applying policers to ACL rules, SONiC can effectively control the flow of net
 Usage examples:
 - **Security**: Policy-Based Metering can be used to guard against network storms or DDoS attacks by limiting traffic volumes.
 - **Quality of Service (QoS)**: It helps in prioritizing critical traffic (like VoIP or video streams) while limiting less important traffic (such as bulk data transfers).
-- **Data Centre**: ensure fair bandwidth distribution.
-
-##### *Image 1: Traffic Flow Overview*
-![alt text](Overview-Flowchart.jpg)
+- **Data Center**: ensure fair bandwidth distribution.
 
 ---
 ### Requirements
@@ -106,7 +102,7 @@ Usage examples:
 ### Architecture Design
 
 No SONiC architecture changes are required as the existing infrastructure is being used.
-##### *Image 2: ACL Configuration Flow Overview*
+##### *Image 1: ACL Configuration Flow Overview*
 
 ![alt text](Overview.jpg)
 
@@ -119,26 +115,41 @@ No SONiC architecture changes are required as the existing infrastructure is bei
 		- Add/Remove/Mange ACLs.
 		- Set or disable policer action.
 		- Query from SAI the ACL actions capability.
-		- Allow policer action only when capability is enabled (SAI query).
 		- As part of rule processing
-		    - Parse and validate policer info as part of rule action processing.
+		    - Parse and validate policer info.
+    		- Allow policer action only when capability is enabled (SAI query).
 	- Policer-Orch
 		- Add/Remove/Mange Policers.
 
-##### *Image 3: Configuration Flow Overview*
+##### *Image 2: Configuration Flow Overview*
 
-![[Config_Flow.jpg]]
+![alt text](Config_Flow.jpg)
+
 
 ---
 ### SAI API
-| SAI Attribute                           | Description                      |
-| --------------------------------------- | -------------------------------- |
-| set_acl_entry_attribute()               | Attach policers to ACL rules     |
-| sai_query_attribute_capability()        | Verify ASIC support for policers |
-| SAI_ACL_ACTION_TYPE_SET_POLICER         |                                  |
-| SAI_ACL_ACTION_TYPE_PACKET_ACTION       |                                  |
-| SAI_ACL_ENTRY_ATTR_ACTION_PACKET_ACTION |                                  |
-| SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER   |                                  |
+
+Use these **existing** SAI APIs for packet actions and policer association:
+
+| SAI Attribute                           | Description                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| SAI_ACL_ACTION_TYPE_PACKET_ACTION       | Action type (Forward, Drop, etc) that can be taken in that ACL entry        |
+| SAI_ACL_ACTION_TYPE_SET_POLICER         | Action type (policer) that can be taken in that ACL entry                   |
+| SAI_ACL_ENTRY_ATTR_ACTION_PACKET_ACTION | Action (Forward, Drop, etc) to be executed on packets matching the ACL rule |
+| SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER   | Action (policer) to be executed on packets matching the ACL rule            |
+
+#### Using example:
+1. Define the possible actions for the ACL table:
+  ```C++
+  sai_attribute_t acl_table_attr[2];
+  sai_acl_action_type_t action_list[2] = {SAI_ACL_ACTION_TYPE_PACKET_ACTION, SAI_ACL_ACTION_TYPE_SET_POLICER};
+  ```
+1. Specify that the rule action to be taken is policer:
+```C++
+sai_attribute_t acl_attribute;
+acl_attribute.id = SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER;
+acl_attribute.value.oid = policer_id;
+```
 
 ---
 ### Configuration and Management
@@ -146,11 +157,11 @@ No SONiC architecture changes are required as the existing infrastructure is bei
 #### Config DB Enhancements
 
 ##### Updated ACL Tables Table schema:
-- The current SAI implementation requires an action list when a new ACL is created.
-  Until this feature was introduced, only default actions were supported, so SONiC addressed this by sending a default action list (**defaultAclActionList**) per table type.
-- Since a new action is added, ACL Tables Table schema will be updated with a new optional action-list field - **ext_actions_list** to accept list of actions, these actions in addition to defaultAclActionList will be used to creating ACL table.
-- The list of actions will be augmented to the existing defaultAclActionList.
-  For example, if user configures **ext_actions_list**=**POLICER**, **ACTION1** - the full action-list of that table will be \[\<**defaultAclActionList(table_type)**\>, **POLICER**, **ACTION1**\]
+- When a new ACL is created in the current SAI implementation, an action list that defines the actions that the ACL rules can be used is required.
+  Until this feature was introduced, only default actions were supported, so SONiC addressed this by sending a default action list \[**defaultAclActionList**\] per table type.
+- Since a new action is added, ACL Tables Table schema will be updated with a new **optional** action-list field **'ext_actions_list'** to accept list of actions.
+- The 'ext_actions_list' actions will be appended to the defaultAclActionList in the ACL table creation..
+  For example, if user configures **ext_actions_list**=\[**POLICER**, **EXT_ACTION_2**\] - the full action-list of that table will be \[**defaultAclActionList(table_type)**, **POLICER**, **EXT_ACTION_2**\]
 ```
   key                  = ACL_TABLE:name                            ; acl_table_name must be unique
   ;field               = value                         
@@ -165,7 +176,8 @@ No SONiC architecture changes are required as the existing infrastructure is bei
                                                                    ; value annotations
   port_name            = 1*64VCHAR                                 ; name of the port, must be unique
   max_ports            = 1*5DIGIT                                  ; number of ports supported on the chip
-* ext_actions_list     = ["POLICER", "ACTION1", "ACTION2", ...]    ; additional action list - can be extended in the future with new actions
+* ext_actions_list     = ["POLICER"]                               ; additional action list - can be extended in the future
+                                                                   ; with new actions. Can be empty for default behavior.
 ```
 ##### Updated ACL Rules Table schema:
 - The ACL Rules Table schema will be updated with a new parameter "policer_name" with value of one of the existing policer object names.
@@ -178,50 +190,39 @@ key: ACL_RULE_TABLE:table_name:rule_name              ; key of the rule entry in
                                                       ; seq is the order of the rules
                                                       ; when the packet is filtered by the
                                                       ; ACL "policy_name".
-                                                      ; A rule is always assocaited with a
-                                                      ; policy.
+                                                      ; A rule is always assocaited with a policy.
 ;field        = value           
 priority      = 1*3DIGIT                              ; rule priority. Valid values range
                                                       ; could be platform dependent
-             
-													  ; option for actions when the rule are matched.
-													  ; it hould be a sub set of the table ext_actions_list felid:
-* packet_action = "forward"/"drop"/"redirect"         ; there is a parameter if packet_action="redirect"
-* packet_action_mirror = True/false                   ; available to mirror acl table type).
+
+* packet_action = "forward"/"drop"/"redirect"         ; option for actions when the rule are matched.
+* packet_action_mirror = True/false                   ; it hould be a sub set of the table 'ext_actions_list' felid
 * packet_action_do_not_nat = True/false       
 * packet_action_policer = True/false          
 
-redirect_action = 1*255CHAR                           ; redirect parameter
+* policer_name = 1*255VCHAR                           ; refer to the policer object name ("packet_action_policer = True").
+
+redirect_action = 1*255CHAR                           ; redirect parameter ("packet_action = True")
                                                       ; This parameter defines a destination for redirected packets
                                                       ; it could be:
                                                       : name of physical port. Example: "Ethernet10"
-                                                      : name of LAG port       Example: "PortChannel5"
+                                                      : name of LAG port.      Example: "PortChannel5"
                                                       
-mirror_action = 1*255VCHAR                            ; refer to the mirror session
-                                                      ; (only available to mirror acl
-                                                      ; table type)
-                                                      
-* policer_name = 1*255VCHAR                           ; refer to the policer object name
-           
+mirror_action = 1*255VCHAR                            ; refer to the mirror session ("packet_action_mirror = True")
+                                                      ; (only available to mirror acl table type)
+
 ether_type    = h16                                   ; Ethernet type field
-           
 ip_type       = ip_types                              ; options of the l2_protocol_type
                                                       ; field. Only v4 is support for
                                                       ; this stage.
-           
 ip_protocol   = h8                                    ; options of the l3_protocol_type field
-           
 src_ip        = ipv4_prefix                           ; options of the source ipv4
                                                       ; address (and mask) field
-           
 dst_ip        = ipv4_prefix                           ; options of the destination ipv4
                                                       ; address (and mask) field
-           
 l4_src_port   = port_num                              ; source L4 port or the
 l4_dst_port   = port_num                              ; destination L4 port
-.
-.
-.
+...
 ```
 
 ##### Example for JSON config file with the new fields:
@@ -270,7 +271,12 @@ config policer add <name> --rate <rate> --burst <burst>
 config policer remove <name>
 config policer update <name> --rate <rate> --burst <burst>
 
-# 'config load' command to configudre the new ACL
+# Add/Remove/Update ACL tables --> new field 'ext_actions_list'
+config acl add table [OPTIONS] <table_name> <table_type> [--ext_actions_list <actions_list>]
+# Add/Remove/Update ACL rules --> new field 'policer_name'
+config acl update full [OPTIONS] [--table_name <table_name>] [policer_name] <acl_json_file_name>
+
+# 'config load' command to configudre the new ACL --> the file contains the new proposal fields
 config load acl_cfg.json
 ```
 #### CLI Show Commands
@@ -305,34 +311,99 @@ SNMP_ACL      DEFAULT_RULE  23            DROP                       ETHER_TYPE:
 
 #### YANG Model Enhancements
 
-Add 'policer' to sonic-yang-models/yang-templates/sonic-types.yang.j2:
-```yang
-typedef packet_action {
-	type enumeration {
-		enum DROP;
-        enum ACCEPT;
-        enum FORWARD;
-        enum REDIRECT;
-        enum DO_NOT_NAT;
-        enum MIRROR;
-      * enum POLICER;
+sonic-yang-models/yang-templates/sonic-acl.yang.j2:
+```c++
+    ...
+    import sonic-policer {
+        prefix policer;
     }
-}
+    ...
+    container sonic-acl {
+        container ACL_RULE {
+            ...
+            leaf PACKET_ACTION {
+                  type enumeration {
+                      enum DROP;
+                      enum ACCEPT;
+                      enum FORWARD;
+                  }
+              }
+
+              leaf PACKET_ACTION_POLICER {
+                  type stypes:boolean_type;
+              }
+
+              leaf PACKET_ACTION_MIRROR {
+                  type stypes:boolean_type;
+              }
+
+              leaf PACKET_ACTION_DO_NOT_NAT {
+                  type stypes:boolean_type;
+              }
+
+              leaf POLICER_ACTION {
+                  when "../PACKET_ACTION_POLICER";
+                  type leafref {
+                      path "/policer:sonic-policer/policer:POLICER/policer:POLICER_LIST/policer:name";
+                  }
+                  description "Policer action applied when PACKET_ACTION_POLICER is True.";
+              }
+
+              leaf MIRROR_INGRESS_ACTION {
+                  when "../PACKET_ACTION_MIRROR";
+                  type leafref {
+                      path "/sms:sonic-mirror-session/sms:MIRROR_SESSION/sms:MIRROR_SESSION_LIST/sms:name";
+                  }
+              }
+              leaf MIRROR_EGRESS_ACTION {
+                  when "../PACKET_ACTION_MIRROR";
+                  type leafref {
+                      path "/sms:sonic-mirror-session/sms:MIRROR_SESSION/sms:MIRROR_SESSION_LIST/sms:name";
+                  }
+              }
+          }
+        }
+        ...
+
+        container ACL_TABLE {
+              ...
+              leaf-list EXT_ACTIONS {
+                  description "Additional action list for ACL table. If no action is chosen, the default is nothing.";
+                  type enumeration {
+                      enum POLICER;
+                  }
+              }
+        }
+```
+
+sonic-yang-models/yang-templates/sonic-policer.yang.j2:
+```c++
+    ...
+    import sonic-acl {
+      prefix acl;
+    }
+    ...
+    container sonic-policer {
+        container POLICER {
+        ...
+          /* Constraint to prevent deletion of polocer that referenced by ACL rule.
+              Note that new policer won't be referenced by any ACL rules initially */
+            must "not(../acl:sonic-acl/acl:ACL_RULE/acl:ACL_RULE_LIST[acl:POLICER_ACTION=current()/name])" {
+                error-message "Policer cannot be deleted when referenced by an ACL rule.";
+            }
+        }
+    }
 ```
 ---
 ### Warmboot and Fastboot Design Impact
 N/A
 
 ---
-### Memory Consumption
-N/A
-
----
 ### Restrictions/Limitations
 
 - Policers must be supported
-- Policer cannot be deleted when referenced by ACL rule.
-- PRE-INGRESS stage isn't supported.
+- PRE/POST INGRESS stage isn't supported (not supported by the existing ACL creation logic)
+
 ---
 ### Testing Requirements/Design
 #### Unit Test Cases
@@ -349,4 +420,5 @@ N/A
 ---
 ### Open/Action Items
 - Are there specific ASIC platforms with limitations for this feature?
-- ACL-Loader utility uses the an external python library (openconfig_acl) that rely on pre-defined, structured models. In order to support the new 'policer_action' per rule the openconfig_acl schema need to be changed.
+- ACL-Loader utility uses the an external python library (openconfig_acl) that rely on pre-defined structured models.
+  In order to support the new 'policer_action' per rule, openconfig_acl implementation need to be changed.
