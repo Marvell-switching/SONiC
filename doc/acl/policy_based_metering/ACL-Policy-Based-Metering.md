@@ -1,45 +1,42 @@
----
-tags:
-  - SONiC
-  - Policer
-  - ACL
----
-## Policy-Based Metering in SONiC- [Policy-Based Metering in SONiC](#policy-based-metering-in-sonic)
-- [Policy-Based Metering in SONiC- Policy-Based Metering in SONiC](#policy-based-metering-in-sonic--policy-based-metering-in-sonic)
-  - [Revision](#revision)
-  - [Scope](#scope)
-    - [Out of Scope](#out-of-scope)
-  - [Definitions/Abbreviations](#definitionsabbreviations)
-  - [Overview](#overview)
-  - [Requirements](#requirements)
-    - [Functional Requirements](#functional-requirements)
-  - [Scalability Requirements:](#scalability-requirements)
-    - [CLI Requirements](#cli-requirements)
-  - [Architecture Design](#architecture-design)
-      - [*Image 1: ACL Configuration Flow Overview*](#image-1-acl-configuration-flow-overview)
-  - [High-Level Design](#high-level-design)
-    - [Modules and Sub-Modules](#modules-and-sub-modules)
-      - [*Image 2: Configuration Flow Overview*](#image-2-configuration-flow-overview)
-  - [SAI API](#sai-api)
-    - [Using example:](#using-example)
-  - [Configuration and Management](#configuration-and-management)
-    - [Config DB Enhancements](#config-db-enhancements)
-      - [Updated ACL Tables Table schema:](#updated-acl-tables-table-schema)
-      - [Updated ACL Rules Table schema:](#updated-acl-rules-table-schema)
-      - [Example for JSON config file with the new fields:](#example-for-json-config-file-with-the-new-fields)
-    - [CLI Config Commands](#cli-config-commands)
-    - [CLI Show Commands](#cli-show-commands)
-    - [YANG Model Enhancements](#yang-model-enhancements)
-  - [Warmboot and Fastboot Design Impact](#warmboot-and-fastboot-design-impact)
-  - [Restrictions/Limitations](#restrictionslimitations)
-  - [Testing Requirements/Design](#testing-requirementsdesign)
-    - [Unit Test Cases](#unit-test-cases)
-    - [System Test Cases](#system-test-cases)
-    - [CLI Level Tests](#cli-level-tests)
-    - [DB validation](#db-validation)
-  - [Open/Action Items](#openaction-items)
+# Policy Based Metering
 
+### Table Of Content
+- [Policy Based Metering](#policy-based-metering)
+    - [Table Of Content](#table-of-content)
+    - [Revision](#revision)
+    - [Scope](#scope)
+      - [Out of Scope](#out-of-scope)
+    - [Definitions/Abbreviations](#definitionsabbreviations)
+    - [Overview](#overview)
+    - [Requirements](#requirements)
+      - [Functional Requirements](#functional-requirements)
+    - [Scalability Requirements:](#scalability-requirements)
+      - [CLI Requirements](#cli-requirements)
+    - [Architecture Design](#architecture-design)
+        - [*Image 1: ACL Configuration Flow Overview*](#image-1-acl-configuration-flow-overview)
+    - [High-Level Design](#high-level-design)
+      - [Modules and Sub-Modules](#modules-and-sub-modules)
+        - [*Image 2: Configuration Flow Overview*](#image-2-configuration-flow-overview)
+    - [SAI API](#sai-api)
+      - [Using example:](#using-example)
+    - [Configuration and Management](#configuration-and-management)
+      - [Config DB Enhancements](#config-db-enhancements)
+        - [Updated ACL Tables Table schema:](#updated-acl-tables-table-schema)
+        - [Updated ACL Rules Table schema:](#updated-acl-rules-table-schema)
+        - [Example for JSON config file with the new fields:](#example-for-json-config-file-with-the-new-fields)
+      - [CLI Config Commands](#cli-config-commands)
+      - [CLI Show Commands](#cli-show-commands)
+      - [YANG Model Enhancements](#yang-model-enhancements)
+    - [Warmboot and Fastboot Design Impact](#warmboot-and-fastboot-design-impact)
+    - [Restrictions/Limitations](#restrictionslimitations)
+    - [Testing Requirements/Design](#testing-requirementsdesign)
+      - [Unit Test Cases](#unit-test-cases)
+      - [System Test Cases](#system-test-cases)
+      - [CLI Level Tests](#cli-level-tests)
+      - [DB validation](#db-validation)
+    - [Open/Action Items](#openaction-items)
 ---
+
 ### Revision
 
 | Version | Date       | Author                       | Description   |
@@ -76,8 +73,8 @@ Policer in networking are responsible for **metering** (Monitoring the rate of t
 By applying policers to ACL rules, SONiC can effectively control the flow of network traffic, ensuring fairness, optimizing bandwidth utilization, and preventing network congestion.
 
 Usage examples:
-- **Security**: Policy-Based Metering can be used to guard against network storms or DDoS attacks by limiting traffic volumes.
-- **Quality of Service (QoS)**: It helps in prioritizing critical traffic (like VoIP or video streams) while limiting less important traffic (such as bulk data transfers).
+- **Security**: Policy-Based Metering can be used to guard against **network storms or DDoS attacks** by limiting traffic rates.
+- **Quality of Service (QoS)**: It helps in prioritizing critical traffic (like VoIP or video streams) while limiting non-critical traffic (for example: backup services traffic).
 - **Data Center**: ensure fair bandwidth distribution.
 
 ---
@@ -85,11 +82,7 @@ Usage examples:
 #### Functional Requirements
 - Backward compatibility for existing ACL features - If policer is not set, the system will function as it did previously.
 - Ability to config/remove/manage policers with ACL entries.
-- Support policer types
-	- **storm_control**: Used to prevent network storms by limiting the rate of broadcast, multicast, and unknown unicast traffic.
-	- **srTCM (Single Rate Three Color Marker)**: Marks packets based on a single rate and three colors (green, yellow, red) to indicate compliance with the traffic profile.
-	- **trTCM (Two Rate Three Color Marker)**: Marks packets based on two rates (committed and peak) and three colors to indicate compliance.
-	- Support rate-limiting in terms of packets per second or bytes per second.
+- Support all existing Policer types (Policer mode, meter_type).
 - Support all existing ACL types (ACL table types, ACL stages).
 ### Scalability Requirements:
 - Support for multiple ACL entries with associated policers.
@@ -139,16 +132,23 @@ Use these **existing** SAI APIs for packet actions and policer association:
 | SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER   | Action (policer) to be executed on packets matching the ACL rule            |
 
 #### Using example:
-1. Define the possible actions for the ACL table:
+   Define the possible actions for the ACL table:
   ```C++
-  sai_attribute_t acl_table_attr[2];
   sai_acl_action_type_t action_list[2] = {SAI_ACL_ACTION_TYPE_PACKET_ACTION, SAI_ACL_ACTION_TYPE_SET_POLICER};
+  sai_attribute_t acl_attr;
+  acl_attr.id = SAI_ACL_TABLE_ATTR_ACL_ACTION_TYPE_LIST;
+  acl_attr.value = action_list;
+  table_attrs.push_back(acl_attr);
+  sai_acl_api->create_acl_table(...table_attrs...);
   ```
-1. Specify that the rule action to be taken is policer:
+   Specify that the rule action to be taken is policer:
 ```C++
-sai_attribute_t acl_attribute;
-acl_attribute.id = SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER;
-acl_attribute.value.oid = policer_id;
+sai_attribute_t ace_attribute;
+ace_attribute.id = SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER;
+ace_attribute.value.aclaction.parameter.oid = policer_id;
+ace_attribute.value.aclaction.enable = true;
+rule_attrs.push_back(ace_attribute);
+sai_acl_api->create_acl_entry(...rule_attrs...)
 ```
 
 ---
@@ -157,7 +157,7 @@ acl_attribute.value.oid = policer_id;
 #### Config DB Enhancements
 
 ##### Updated ACL Tables Table schema:
-- When a new ACL is created in the current SAI implementation, an action list that defines the actions that the ACL rules can be used is required.
+- When a new ACL is created, SAI API should get an action list of supported actions that could be used in the rules belonging to this table. 
   Until this feature was introduced, only default actions were supported, so SONiC addressed this by sending a default action list \[**defaultAclActionList**\] per table type.
 - Since a new action is added, ACL Tables Table schema will be updated with a new **optional** action-list field **'ext_actions_list'** to accept list of actions.
 - The 'ext_actions_list' actions will be appended to the defaultAclActionList in the ACL table creation..
@@ -192,7 +192,6 @@ key: ACL_RULE_TABLE:table_name:rule_name              ; key of the rule entry in
                                                       ; ACL "policy_name".
                                                       ; A rule is always assocaited with a policy.
 ;field        = value           
-priority      = 1*3DIGIT                              ; rule priority. Valid values range
                                                       ; could be platform dependent
 
 * packet_action = "forward"/"drop"/"redirect"         ; option for actions when the rule are matched.
@@ -211,17 +210,13 @@ redirect_action = 1*255CHAR                           ; redirect parameter ("pac
 mirror_action = 1*255VCHAR                            ; refer to the mirror session ("packet_action_mirror = True")
                                                       ; (only available to mirror acl table type)
 
+priority      = 1*3DIGIT                              ; rule priority. Valid values range
 ether_type    = h16                                   ; Ethernet type field
-ip_type       = ip_types                              ; options of the l2_protocol_type
-                                                      ; field. Only v4 is support for
-                                                      ; this stage.
+ip_type       = ip_types                              ; options of the l2_protocol_type field.
+                                                      ; Only v4 is support for this stage.
 ip_protocol   = h8                                    ; options of the l3_protocol_type field
-src_ip        = ipv4_prefix                           ; options of the source ipv4
-                                                      ; address (and mask) field
+src_ip        = ipv4_prefix                           ; options of the source ipv4 address (and mask) field
 dst_ip        = ipv4_prefix                           ; options of the destination ipv4
-                                                      ; address (and mask) field
-l4_src_port   = port_num                              ; source L4 port or the
-l4_dst_port   = port_num                              ; destination L4 port
 ...
 ```
 
@@ -254,7 +249,7 @@ l4_dst_port   = port_num                              ; destination L4 port
         "priority": "70",
         "packet_action": "FORWARD",
       * "packet_action_policer": "True",
-      * "policer_name": M_POLICER_7,   
+      * "policer_name": "M_POLICER_7",   
         "IP_PROTOCOL": "TCP",
         "SRC_IP": "10.2.130.0/24",
         "DST_IP": "10.5.170.0/24",
