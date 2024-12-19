@@ -17,7 +17,7 @@
       - [Modules and Sub-Modules](#modules-and-sub-modules)
         - [*Image 1: Configuration Flow Overview*](#image-1-configuration-flow-overview)
     - [SAI API](#sai-api)
-      - [Usage example:](#usage-example)
+      - [Usage example (aclorch.cpp):](#usage-example-aclorchcpp)
     - [Configuration and Management](#configuration-and-management)
       - [Config DB Enhancements](#config-db-enhancements)
         - [New ACL table type](#new-acl-table-type)
@@ -117,18 +117,21 @@ No SONiC architecture changes are required as the existing infrastructure is bei
 
 Use these **existing** SAI APIs for packet actions and policer association:
 
-| SAI Attribute                           | Description                                                                 |
-| --------------------------------------- | --------------------------------------------------------------------------- |
-| SAI_ACL_ACTION_TYPE_PACKET_ACTION       | Action type (Forward, Drop, etc) that can be taken in that ACL entry        |
-| SAI_ACL_ACTION_TYPE_SET_POLICER         | Action type (policer) that can be taken in that ACL entry                   |
-| SAI_ACL_ENTRY_ATTR_ACTION_PACKET_ACTION | Action (Forward, Drop, etc) to be executed on packets matching the ACL rule |
-| SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER   | Action (policer) to be executed on packets matching the ACL rule            |
+| SAI Attribute                             | Description                                                                 |
+| ---------------------------------------   | --------------------------------------------------------------------------- |
+| SAI_ACL_TABLE_ATTR_ACL_ACTION_TYPE_LIST   | List of action types that can be applied in the ACL table                   |
+| SAI_ACL_ACTION_TYPE_PACKET_ACTION         | Action type (Forward, Drop, etc) that can be taken in that ACL entry        |
+| + SAI_ACL_ACTION_TYPE_SET_POLICER         | Action type (policer) that can be taken in that ACL entry                   |
+| SAI_ACL_ENTRY_ATTR_ACTION_PACKET_ACTION   | Action (Forward, Drop, etc) to be executed on packets matching the ACL rule |
+| + SAI_ACL_ENTRY_ATTR_ACTION_SET_POLICER   | Action (policer) to be executed on packets matching the ACL rule            |
 
-#### Usage example:
+#### Usage example (aclorch.cpp):
 Define the possible actions for the ACL table:
 ```C++
 ...
+sai_attribute_t table_attrs;
 sai_acl_action_type_t action_list[2] = {SAI_ACL_ACTION_TYPE_PACKET_ACTION, SAI_ACL_ACTION_TYPE_SET_POLICER};
+acl_attr.id = SAI_ACL_TABLE_ATTR_ACL_ACTION_TYPE_LIST;
 acl_attr.value = action_list;
 ...
 sai_acl_api->create_acl_table(...table_attrs...);
@@ -218,11 +221,12 @@ Two options to bind policer with ACL rules:
 1. The existing "config acl" CLI will be extended to support a new optional argument **"policer_name"**.
    All rules that belong to that table (as part of the JSON file) will be bound with that policer object.
 ```bash
-    config acl add table [OPTIONS] <table_name> <table_type> [--policer_name <policer_name>]
+    config acl add table [OPTIONS] <table_name> <table_type>
     config acl update full [OPTIONS] [--policer_name <policer_name>] <FILE_NAME>
     config acl update incremental [OPTIONS] [--policer_name <policer_name>] <FILE_NAME>
 
     # Example:
+    config acl add table "MY_ACL_1" "POLICER"
     config acl update full "MY_ACL_2" --policer_name "M_POLICER_7" rules_example.json
 
     # note that these commands wrapps "AclLoader" utility script that uses the external "open_config" lib
@@ -252,7 +256,7 @@ Two options to bind policer with ACL rules:
             "red_packet_action": "drop"
         },
 
-        /* create ACL table type policer */
+        /* create ACL policer type table */
         "ACL_TABLE|MY_ACL_1": {
             "policy_desc": "Limit some traffic flows",
           + "type": "POLICER",
@@ -362,7 +366,7 @@ sonic-yang-models/yang-templates/sonic-policer.yang.j2:
         ...
 +         /* prevent deletion of policer that referenced by ACL rule.
 +            Note that new policer won't be referenced by any ACL rules initially */
-+           must "not(../acl:sonic-acl/acl:ACL_RULE/acl:ACL_RULE_LIST[acl:POLICER_ACTION=current()/name])" {
++           must "not(../acl:sonic-acl/acl:ACL_RULE/acl:ACL_RULE_LIST[acl:policer_action=current()/name])" {
 +               error-message "Policer cannot be deleted when referenced by an ACL rule.";
 +           }
         }
@@ -398,8 +402,6 @@ During warmboot or fastboot, both ACL rules and policers configurations are rest
 - Verify CONFIG DB is correctly updated.
 ---
 ### Open/Action Items
-- ACL-Loader utility uses the an external python library (openconfig_acl) that rely on pre-defined structured models.
-  In order to support the new 'policer_action' per rule, openconfig_acl implementation need to be updated.
 - Is it possible that SAI supports for more than single action per rule. Probably with some changes in ACL-Orch, is it possible to
   support it
 - Currently, the ACL-Orch implementation supports only a single action per rule. However, this limitation
