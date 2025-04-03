@@ -61,7 +61,7 @@ ARS can be divided into two parts:
 This design follows SAI conceptual model described in https://github.com/opencomputeproject/SAI/blob/master/doc/ARS/Adaptive-Routing-and-Switching.md.
 
 
-The diagram illustrates a Conceptual Packet Flow, where macro flows are collections of multiple micro flows that share the same routing destination. Micro flows, identified by a 5-tuple (source IP, destination IP, protocol, source port, destination port), are hashed, and if several micro flows hash to the same bucket, they are grouped into a macro flow. These flows are further segmented into flow-lets based on idle time thresholds between packets. A Macro Flow Table maps these flows to next-hop destinations and tracks their status (e.g., "active" or "expired"). Using Adaptive Routing within an ECMP group, the system dynamically assigns traffic based on link quality metrics like latency and packet loss.
+The diagram illustrates a Conceptual Packet Flow, where macro flows are collections of multiple micro flows. Micro flows, identified by a 5-tuple (source IP, destination IP, protocol, source port, destination port), are hashed, and if several micro flows hash to the same bucket, they are grouped into a macro flow. These flows are further segmented into flow-lets based on idle time thresholds between packets. A Macro Flow Table maps these flows to next-hop destinations and tracks their status (e.g., "active" or "expired"). Using Adaptive Routing within an ECMP group, the system dynamically assigns traffic based on link quality metrics like latency and packet loss.
 
 __Figure 1: ARS Packet Flow__
 ![ARS flow](images/ARSPacketFlow.png "Figure 1: ARS Packet Flow")
@@ -72,7 +72,7 @@ __Figure 2: ARS SAI Pipeline Flow__
 
 ### Use cases
 - L3 traffic egressing via NHG
-    * NH pointing to portlag
+    * NH pointing to port
     * NH pointing to lag
 - L2 traffic egressing via LAG
 - Tunnel interface as egress interface is not supported
@@ -262,7 +262,7 @@ Following table lists SAI usage and supported attributes with division to phase 
 
 | SAI api | Supported SAI attribute 
 | ------- | ----------------------- 
-|create_ars_profile | SAI_ARS_PROFILE_ATTR_PORT_LOAD_PAST<br>SAI_ARS_PROFILE_ATTR_LOAD_PAST_MIN_VAL<br>SAI_ARS_PROFILE_ATTR_LOAD_PAST_MAX_VAL<br>SAI_ARS_PROFILE_ATTR_ENABLE_IPV4<br>SAI_ARS_PROFILE_ATTR_ENABLE_IPV6<br>SAI_ARS_PROFILE_ATTR_MAX_FLOWS<br>SAI_ARS_PROFILE_ATTR_ALGO<br>SAI_ARS_PROFILE_ATTR_PORT_LOAD_FUTURE<br>SAI_ARS_PROFILE_ATTR_PORT_LOAD_PAST_WEIGHT<br>SAI_ARS_PROFILE_ATTR_PORT_LOAD_FUTURE_WEIGHT<br>SAI_ARS_PROFILE_ATTR_SAMPLING_INTERVAL
+|create_ars_profile | SAI_ARS_PROFILE_ATTR_PORT_LOAD_PAST<br>SAI_ARS_PROFILE_ATTR_LOAD_PAST_MIN_VAL<br>SAI_ARS_PROFILE_ATTR_LOAD_PAST_MAX_VAL<br>SAI_ARS_PROFILE_ATTR_ENABLE_IPV4<br>SAI_ARS_PROFILE_ATTR_ENABLE_IPV6<br>SAI_ARS_PROFILE_ATTR_MAX_FLOWS<br>SAI_ARS_PROFILE_ATTR_ALGO<br>SAI_ARS_PROFILE_ATTR_PORT_LOAD_FUTURE<br>SAI_ARS_PROFILE_ATTR_PORT_LOAD_PAST_WEIGHT<br>SAI_ARS_PROFILE_ATTR_PORT_LOAD_FUTURE_WEIGHT<br>SAI_ARS_PROFILE_ATTR_SAMPLING_INTERVAL<br>SAI_ARS_PROFILE_ATTR_ECMP_ARS_MAX_GROUPS<br>SAI_ARS_PROFILE_ATTR_ECMP_ARS_MAX_MEMBERS_PER_GROUP
 |create_ars | SAI_ARS_ATTR_MODE<br>SAI_ARS_MODE_FLOWLET_QUALITY<br>SAI_ARS_MODE_PER_PACKET_QUALITY<br>SAI_ARS_ATTR_IDLE_TIME<br>SAI_ARS_ATTR_MAX_FLOWS
 |set_port_attribute|SAI_PORT_ATTR_ARS_ENABLE<br>SAI_PORT_ATTR_ARS_PORT_LOAD_SCALING_FACTOR
 |create_next_hop_group|SAI_NEXT_HOP_GROUP_ATTR_ARS_OBJECT_ID
@@ -384,6 +384,13 @@ Following table lists SAI usage and supported attributes with division to phase 
                 }
                 description "ARS-enabled interface name";
             }
+
+            leaf scaling_factor {
+                type uint16;
+                default "10000";
+                description "This factor used to normalize load measurements across ports with different speeds.";
+            }
+
         }
         /* end of list ARS_INTERFACE_LIST */
     }
@@ -595,7 +602,7 @@ ipv4_enable             = boolean       ;Whether ARS is enabled over IPv4 packet
 ipv6_enable             = boolean       ;Whether ARS is enabled over IPv6 packets
 
 
-Configuration exmaple:
+Configuration example:
 
 "ARS_PROFILE": {
     "default": {
@@ -607,7 +614,7 @@ Configuration exmaple:
         "past_load_weight": 1,
         "future_load_min_value" : 0,
         "future_load_max_value" : 1000,
-        "future_load_weight": 5.
+        "future_load_weight": 5,
         "ipv4_enable" : "true",
         "ipv6_enable" : "true"
     }
@@ -620,10 +627,16 @@ Configuration exmaple:
 
 key                      = ARS_INTERFACE|if_name          ;ifname is the name of the ARS-enabled interface
 
-Configuration exmaple:
+;field                  = value
+
+scaling_factor          = uint32                          ;Port speed normalization
+
+Configuration example:
 
 "ARS_INTERFACE": {
-    "Ethernet0" : {},
+    "Ethernet0" : {
+        "scaling_factor": 100
+    },
     "Ethernet8" : {}
 }
 ```
@@ -644,7 +657,7 @@ max_flows                = uint16                                   ;Max number 
 *alternative_path_cost    = uint16                                  ;cost of switching to alternative path
 *alternative_path_members = inet-address                            ;Alternative path members address
 
-Configuration exmaple:
+Configuration example:
 
 "ARS_NEXTHOP_GROUP": {
     "default|192.168.0.100/32" : {
@@ -653,7 +666,7 @@ Configuration exmaple:
         "flowlet_idle_time" : 256,
         "max_flows" : 512,
         "primary_path_threshold" : 100,
-        "alternative_path_cost": 250
+        "alternative_path_cost": 250,
         "alternative_path_members": {"1.1.1.1", "2.2.2.2"}
     }
 }
@@ -675,7 +688,7 @@ primary_path_threshold   = uint16                                   ;Quality thr
 alternative_path_cost    = uint16                                  ;cost of switching to alternative path
 alternative_path_members = string                                  ;Members of the LAG participating in alternative path
 
-Configuration exmaple:
+Configuration example:
 
 "ARS_PORTCHANNEL": {
     "PortChannel1" : {
@@ -684,7 +697,7 @@ Configuration exmaple:
         "flowlet_idle_time" : 256,
         "max_flows" : 512,
         "primary_path_threshold" : 100,
-        "alternative_path_cost": 250
+        "alternative_path_cost": 250,
         "alternative_path_members": {"Ethernet0", "Ethernet10"}
     }
 }
@@ -829,9 +842,9 @@ Implementation will be done in two phases.
 
 #### Unit Test cases  
 
-Tests separated into two group - mandatory and optional (only if supported by vendor sai) parts.
+Tests separated into two groups - mandatory and optional (only if supported by vendor sai) parts.
 
-- Manadatory:
+- Mandatory:
 
 1. ARS Profile Creation
     * Verify that ARS profiles are created successfully with valid parameters.
