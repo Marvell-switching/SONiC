@@ -445,6 +445,7 @@ Following table lists SAI usage and supported attributes with division to phase 
 
             leaf flowlet_idle_time {
                 type uint16;
+                range 2..2047;
                 description  "Idle duration in microseconds. This duration is to classifying a flow-let in a macro flow.";
             }
 
@@ -511,6 +512,7 @@ Following table lists SAI usage and supported attributes with division to phase 
 
             leaf flowlet_idle_time {
                 type uint16;
+                range 2..2047;
                 description  "Idle duration in microseconds. This duration is to classifying a flow-let in a macro flow.";
             }
 
