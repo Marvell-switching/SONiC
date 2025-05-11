@@ -105,7 +105,6 @@ __Figure 2: ARS SAI Pipeline Flow__
     - Prefix-based
     - Nexthop-based
     - Prefix+Nexthops
-    - Match-all
 3. Support path quality configuration
 4. Support ACL action to disable ARS 
 
