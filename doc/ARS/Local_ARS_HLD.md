@@ -25,7 +25,6 @@
   - [ARS_PROFILE table](#ars_profile)
   - [ARS_INTERFACE table](#ars_interface)
   - [ARS_NEXTHOP_GROUP table](#ars_nexthop_group)
-  - [ARS_NEXTHOP_GROUP_PREFIX table](#ars_nexthop_group_prefix)
   - [ARS_NEXTHOP_GROUP_MEMBER table](#ars_nexthop_group_member)
   - [ARS_PORTCHANNEL table](#ars_portchannel)
   - [ACL_RULE table](#acl_rule)
