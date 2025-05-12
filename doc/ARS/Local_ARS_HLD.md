@@ -38,10 +38,11 @@
 
 ### Revision  
 
-| Revision | Date        | Author           | Change Description     |
-| -------- | ----------- | ---------------- | ---------------------- |
-| 1.0      | Dec 01 2024 | Vladimir Kuk     | Initial proposal       |
-| 1.1      | Apr 21 2025 | Vladimir Kuk     | Review comments update |
+| Revision | Date        | Author           | Change Description            |
+| -------- | ----------- | ---------------- | ----------------------------- |
+| 1.0      | Dec 01 2024 | Vladimir Kuk     | Initial proposal              |
+| 1.1      | Apr 21 2025 | Vladimir Kuk     | Review comments update        |
+| 1.2      | May 12 2025 | Vladimir Kuk     | Addressing community comments |
 
 ### Definitions/Abbreviations 
 
